@@ -21,7 +21,7 @@ SELECT
     soh.OrderDate,
     ROW_NUMBER() OVER(PARTITION BY CustomerID ORDER BY OrderDate) AS "Row number"
 FROM 
-    Sales.SalesOrderHeader AS soh
+    Sales.SalesOrderHeader AS soh;
 
 --4
 WITH ProductSubcaregoryAVG(ProductID, Average)
@@ -41,4 +41,22 @@ FROM
     Production.Product AS p
 JOIN
     ProductSubcaregoryAVG AS pscAVG ON pscAVG.ProductID = p.ProductID
-WHERE p.ListPrice > pscAVG.Average
+WHERE p.ListPrice > pscAVG.Average;
+
+
+WITH DateNumber(ProductID, Amount, DateNumber)
+AS (
+    SELECT 
+        sod.ProductID,
+        sod.OrderQty,
+        ROW_NUMBER() OVER (
+            PARTITION BY sod.ProductID 
+        ORDER BY soh.OrderDate DESC)
+    FROM Sales.SalesOrderDetail AS sod
+    JOIN Sales.SalesOrderHeader AS soh ON soh.SalesOrderID = sod.SalesOrderID
+)
+SELECT p.ProductID, p.Name, AVG(dn.Amount) AS "Last 3 AVG"
+FROM Production.Product AS p
+JOIN DateNumber AS dn ON dn.ProductID = p.ProductID
+WHERE dn.DateNumber <= 3
+GROUP BY p.ProductID, p.Name
