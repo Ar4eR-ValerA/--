@@ -60,3 +60,30 @@ FROM Production.Product AS p
 JOIN DateNumber AS dn ON dn.ProductID = p.ProductID
 WHERE dn.DateNumber <= 3
 GROUP BY p.ProductID, p.Name
+
+--extra 1
+WITH CategoryCounter(CustomerID, Amount)
+AS (
+    SELECT soh.CustomerID, COUNT(DISTINCT psc.ProductCategoryID)
+    FROM Sales.SalesOrderHeader AS soh
+    JOIN Sales.SalesOrderDetail AS sod ON soh.SalesOrderID = sod.SalesOrderID
+    JOIN Production.Product AS p ON sod.ProductID = p.ProductID
+    JOIN Production.ProductSubcategory AS psc ON psc.ProductSubcategoryID = p.ProductSubcategoryID
+    GROUP BY soh.CustomerID
+),
+ProductCategoryCounter(CustomerID, ProductCategoryID, Amount)
+AS (
+    SELECT soh.CustomerID, psc.ProductCategoryID, COUNT(DISTINCT sod.ProductID)
+    FROM Sales.SalesOrderHeader AS soh
+    JOIN Sales.SalesOrderDetail AS sod ON soh.SalesOrderID = sod.SalesOrderID
+    JOIN Production.Product AS p ON sod.ProductID = p.ProductID
+    JOIN CategoryCounter AS cc ON cc.CustomerID = soh.CustomerID
+    JOIN Production.ProductSubcategory AS psc ON psc.ProductSubcategoryID = p.ProductSubcategoryID
+    WHERE cc.Amount > 1
+    GROUP BY soh.CustomerID, psc.ProductCategoryID
+)
+SELECT 
+    pcc.CustomerID, 
+    pcc.ProductCategoryID, 
+    pcc.Amount * 1.0 / (SUM(Amount) OVER (PARTITION BY pcc.CustomerID) - Amount)
+FROM ProductCategoryCounter AS pcc
