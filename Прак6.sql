@@ -43,7 +43,7 @@ JOIN
     ProductSubcaregoryAVG AS pscAVG ON pscAVG.ProductID = p.ProductID
 WHERE p.ListPrice > pscAVG.Average;
 
-
+--5
 WITH DateNumber(ProductID, Amount, DateNumber)
 AS (
     SELECT 
@@ -59,31 +59,43 @@ SELECT p.ProductID, p.Name, AVG(dn.Amount) AS "Last 3 AVG"
 FROM Production.Product AS p
 JOIN DateNumber AS dn ON dn.ProductID = p.ProductID
 WHERE dn.DateNumber <= 3
-GROUP BY p.ProductID, p.Name
+GROUP BY p.ProductID, p.Name;
 
 --extra 1
-WITH CategoryCounter(CustomerID, Amount)
+WITH ProductsInCategory(ProductCategoryID, Amount)
 AS (
-    SELECT soh.CustomerID, COUNT(DISTINCT psc.ProductCategoryID)
-    FROM Sales.SalesOrderHeader AS soh
-    JOIN Sales.SalesOrderDetail AS sod ON soh.SalesOrderID = sod.SalesOrderID
+    SELECT DISTINCT psc.ProductCategoryID, 
+    DENSE_RANK() OVER (PARTITION BY psc.ProductCategoryID ORDER BY p.ProductID) +
+    DENSE_RANK() OVER (PARTITION BY psc.ProductCategoryID ORDER BY p.ProductID DESC) - 1
+    FROM Sales.SalesOrderDetail AS sod
     JOIN Production.Product AS p ON sod.ProductID = p.ProductID
     JOIN Production.ProductSubcategory AS psc ON psc.ProductSubcategoryID = p.ProductSubcategoryID
-    GROUP BY soh.CustomerID
 ),
 ProductCategoryCounter(CustomerID, ProductCategoryID, Amount)
 AS (
-    SELECT soh.CustomerID, psc.ProductCategoryID, COUNT(DISTINCT sod.ProductID)
+    SELECT DISTINCT soh.CustomerID, psc.ProductCategoryID, 
+    DENSE_RANK() OVER (PARTITION BY soh.CustomerID, psc.ProductCategoryID ORDER BY p.ProductID) +
+    DENSE_RANK() OVER (PARTITION BY soh.CustomerID, psc.ProductCategoryID ORDER BY p.ProductID DESC) - 1
     FROM Sales.SalesOrderHeader AS soh
     JOIN Sales.SalesOrderDetail AS sod ON soh.SalesOrderID = sod.SalesOrderID
     JOIN Production.Product AS p ON sod.ProductID = p.ProductID
-    JOIN CategoryCounter AS cc ON cc.CustomerID = soh.CustomerID
     JOIN Production.ProductSubcategory AS psc ON psc.ProductSubcategoryID = p.ProductSubcategoryID
-    WHERE cc.Amount > 1
-    GROUP BY soh.CustomerID, psc.ProductCategoryID
 )
 SELECT 
     pcc.CustomerID, 
     pcc.ProductCategoryID, 
-    pcc.Amount * 1.0 / (SUM(Amount) OVER (PARTITION BY pcc.CustomerID) - Amount)
+    pcc.Amount,
+    pic.Amount
 FROM ProductCategoryCounter AS pcc
+JOIN ProductsInCategory AS pic ON pic.ProductCategoryID = pcc.ProductCategoryID
+
+--extra 2
+SELECT DISTINCT sod.SalesOrderID, 
+DENSE_RANK() OVER(PARTITION BY sod.SalesOrderID ORDER BY p.ProductSubcategoryID) +
+DENSE_RANK() OVER(PARTITION BY sod.SalesOrderID ORDER BY p.ProductSubcategoryID DESC) - 1,
+DENSE_RANK() OVER(PARTITION BY sod.SalesOrderID ORDER BY psc.ProductCategoryID) +
+DENSE_RANK() OVER(PARTITION BY sod.SalesOrderID ORDER BY psc.ProductCategoryID DESC) - 1
+FROM Sales.SalesOrderDetail AS sod
+JOIN Production.Product AS p ON sod.ProductID = p.ProductID
+JOIN Production.ProductSubcategory AS psc ON p.ProductSubcategoryID = psc.ProductSubcategoryID
+ORDER BY sod.SalesOrderID
